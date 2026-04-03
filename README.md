@@ -2,8 +2,8 @@
 
 **Linux desktop speech-to-text tool** – beszélj, és a szöveg oda kerül, ahol a kurzor áll.
 
-> Press **Ctrl + ↓** to start recording, press again to stop.  
-> The transcribed text is "typed" into whatever application has focus.
+> Press **Ctrl + ↓** to start recording, press again to stop.
+> The transcribed text is typed and submitted (Enter) automatically into whatever application has focus.
 
 ## Features
 
@@ -22,7 +22,7 @@
 │  2. Ctrl+↓  →  Stop recording                        │
 │  3. Whisper →  Transcribe audio (GPU)                 │
 │  4. xdotool →  Type text into focused window          │
-│  5. You     →  Press Enter to send                    │
+│  5. xdotool →  Press Enter to send (automatic)        │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -61,8 +61,7 @@ VOICE_TYPER_MODEL=large-v3 ./start.sh
 3. Press **Ctrl + ↓** → indicator turns red (recording)
 4. Speak in English or Hungarian
 5. Press **Ctrl + ↓** → indicator turns yellow (transcribing)
-6. Text appears in the text field as if you typed it
-7. Press **Enter** to send
+6. Text appears in the text field and **Enter is pressed automatically**
 
 ### Models
 

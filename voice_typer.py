@@ -3,7 +3,7 @@
 Voice Typer - Linux desktop speech-to-text tool
 ================================================
 Ctrl+Down: Start/stop recording
-The transcribed text is typed into whatever window has focus.
+The transcribed text is typed and submitted (Enter) into whatever window has focus.
 
 Requires: Python 3.10+, PulseAudio/PipeWire, X11 or XWayland
 GPU-accelerated via OpenAI Whisper (large-v3 model)
@@ -369,7 +369,13 @@ class VoiceTyperApp:
                     # Small delay to ensure Ctrl key is released
                     time.sleep(0.2)
                     type_text(text)
-                    notify("VoiceTyper", f"Typed: {text[:60]}...", "low")
+                    # Press Enter to send the text
+                    time.sleep(0.05)
+                    subprocess.run(
+                        ["xdotool", "key", "--clearmodifiers", "Return"],
+                        check=True, timeout=5
+                    )
+                    notify("VoiceTyper", f"Sent: {text[:60]}...", "low")
                 else:
                     print("  No speech detected.")
                     notify("VoiceTyper", "No speech detected.", "low")
