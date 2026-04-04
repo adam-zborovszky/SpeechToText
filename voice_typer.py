@@ -3,7 +3,7 @@
 Voice Typer - Linux desktop speech-to-text tool
 ================================================
 Ctrl+Down: Start/stop recording
-The transcribed text is typed and submitted (Enter) into whatever window has focus.
+The transcribed text is typed into whatever window has focus.
 
 Requires: Python 3.10+, PulseAudio/PipeWire, X11 or XWayland
 GPU-accelerated via OpenAI Whisper (large-v3 model)
@@ -266,43 +266,66 @@ class Transcriber:
 
 def type_text(text: str):
     """
-    Type text into the currently focused window using xdotool.
-    Uses xdotool type with --clearmodifiers to handle special characters.
-    For Hungarian characters, we use xdotool's built-in Unicode support.
+    Insert text into the currently focused window via clipboard paste.
+    This is instant regardless of text length.
+    The original clipboard content is saved and restored afterward.
+    No Enter is pressed - the user decides when to send.
     """
     if not text:
         return
 
-    # xdotool type handles Unicode well on X11
-    # --clearmodifiers releases any held keys (like Ctrl from our hotkey)
-    # --delay controls typing speed in ms
     try:
-        subprocess.run(
-            ["xdotool", "type", "--clearmodifiers",
-             "--delay", str(int(TYPING_DELAY * 1000)), text],
-            check=True, timeout=30
-        )
-    except subprocess.TimeoutExpired:
-        print("Warning: xdotool typing timed out")
-    except subprocess.CalledProcessError as e:
-        print(f"Warning: xdotool error: {e}")
-        # Fallback: clipboard paste
-        _paste_text(text)
+        # Save current clipboard content
+        old_clipboard = None
+        try:
+            result = subprocess.run(
+                ["xclip", "-selection", "clipboard", "-o"],
+                capture_output=True, timeout=2
+            )
+            if result.returncode == 0:
+                old_clipboard = result.stdout
+        except Exception:
+            pass
 
-
-def _paste_text(text: str):
-    """Fallback: copy to clipboard and paste with Ctrl+V."""
-    try:
+        # Copy transcribed text to clipboard
         proc = subprocess.Popen(
             ["xclip", "-selection", "clipboard"],
             stdin=subprocess.PIPE
         )
         proc.communicate(text.encode("utf-8"))
-        time.sleep(0.1)
-        subprocess.run(["xdotool", "key", "--clearmodifiers", "ctrl+v"],
-                       check=True)
+
+        # Paste with Ctrl+V
+        time.sleep(0.05)
+        subprocess.run(
+            ["xdotool", "key", "--clearmodifiers", "ctrl+v"],
+            check=True, timeout=5
+        )
+
+        # Restore original clipboard after a short delay
+        if old_clipboard is not None:
+            time.sleep(0.3)
+            try:
+                proc = subprocess.Popen(
+                    ["xclip", "-selection", "clipboard"],
+                    stdin=subprocess.PIPE
+                )
+                proc.communicate(old_clipboard)
+            except Exception:
+                pass
+
+        print(f"  ✓ Pasted {len(text)} characters")
+
     except Exception as e:
-        print(f"Paste fallback also failed: {e}")
+        print(f"Paste error: {e}")
+        # Last resort fallback: xdotool type (slow but works without xclip)
+        try:
+            subprocess.run(
+                ["xdotool", "type", "--clearmodifiers",
+                 "--delay", "10", text],
+                check=True, timeout=60
+            )
+        except Exception as e2:
+            print(f"Typing fallback also failed: {e2}")
 
 
 # ─── Main Application ───────────────────────────────────────────────────────
@@ -314,13 +337,18 @@ class VoiceTyperApp:
         self.tray: TrayWindow | None = None
         self.is_recording = False
         self.current_keys = set()
-        self._loading_model = False
+        self._model_ready = threading.Event()
+        self._model_loading_started = False
 
     def _ensure_model(self):
-        if self.transcriber is None and not self._loading_model:
-            self._loading_model = True
+        """Load model if not yet started, then wait until it's ready."""
+        if not self._model_loading_started:
+            self._model_loading_started = True
             self.transcriber = Transcriber()
-            self._loading_model = False
+            self._model_ready.set()
+        else:
+            # Another thread is loading - just wait
+            self._model_ready.wait(timeout=120)
 
     def toggle_recording(self):
         if self.is_recording:
@@ -369,13 +397,7 @@ class VoiceTyperApp:
                     # Small delay to ensure Ctrl key is released
                     time.sleep(0.2)
                     type_text(text)
-                    # Press Enter to send the text
-                    time.sleep(0.05)
-                    subprocess.run(
-                        ["xdotool", "key", "--clearmodifiers", "Return"],
-                        check=True, timeout=5
-                    )
-                    notify("VoiceTyper", f"Sent: {text[:60]}...", "low")
+                    notify("VoiceTyper", f"Typed: {text[:60]}...", "low")
                 else:
                     print("  No speech detected.")
                     notify("VoiceTyper", "No speech detected.", "low")
